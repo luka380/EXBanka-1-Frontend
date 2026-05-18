@@ -21,6 +21,7 @@ export interface Account {
   account_category: AccountCategory
   balance: number
   available_balance: number
+  reserved_balance: number
   status: AccountStatus
   owner_id: number
   owner_name?: string
@@ -42,7 +43,6 @@ export interface AccountFilters {
   name_filter?: string
   account_number_filter?: string
   type_filter?: string
-  client_id?: number
   page?: number
   page_size?: number
 }

@@ -1,11 +1,11 @@
 describe('Portfolio Page', () => {
   beforeEach(() => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio?*', { fixture: 'portfolio-holdings.json' }).as(
+    cy.intercept('GET', '**/api/v3/me/portfolio?*', { fixture: 'portfolio-holdings.json' }).as(
       'getPortfolio'
     )
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio/summary*', { fixture: 'portfolio-summary.json' }).as(
-      'getSummary'
-    )
+    cy.intercept('GET', '**/api/v3/me/portfolio/summary*', {
+      fixture: 'portfolio-summary.json',
+    }).as('getSummary')
   })
 
   it('should display portfolio summary card', () => {
@@ -30,7 +30,7 @@ describe('Portfolio Page', () => {
     cy.wait('@getPortfolio')
 
     // Table headers
-    cy.contains('th', 'Ticker').should('be.visible')
+    cy.contains('th', 'Ticker').scrollIntoView().should('be.visible')
     cy.contains('th', 'Name').should('be.visible')
     cy.contains('th', 'Type').should('be.visible')
     cy.contains('th', 'Quantity').should('be.visible')
@@ -40,42 +40,59 @@ describe('Portfolio Page', () => {
     cy.contains('th', 'Actions').should('be.visible')
 
     // Holding data
-    cy.contains('AAPL').should('be.visible')
-    cy.contains('Apple Inc.').should('be.visible')
-    cy.contains('stock').should('be.visible')
+    cy.contains('td', 'AAPL').scrollIntoView().should('be.visible')
+    cy.contains('td', 'Apple Inc.').should('be.visible')
+    cy.contains('td', 'stock').should('be.visible')
 
-    cy.contains('ESM26').should('be.visible')
-    cy.contains('E-mini S&P 500 Jun 2026').should('be.visible')
-    cy.contains('futures').should('be.visible')
+    cy.contains('td', 'ESM26').should('be.visible')
+    cy.contains('td', 'E-mini S&P 500 Jun 2026').should('be.visible')
+    cy.contains('td', 'futures').should('be.visible')
 
-    cy.contains('2 holdings').should('be.visible')
+    cy.contains('2 holdings').scrollIntoView().should('be.visible')
   })
 
   it('should show Sell button for all holdings', () => {
     cy.loginAsClient('/portfolio')
     cy.wait('@getPortfolio')
 
-    cy.contains('button', 'Sell').should('be.visible')
+    cy.contains('button', 'Sell').scrollIntoView().should('be.visible')
   })
 
   it('should show Make Public button for non-option holdings', () => {
     cy.loginAsClient('/portfolio')
     cy.wait('@getPortfolio')
 
-    cy.contains('button', 'Make Public').should('be.visible')
+    cy.contains('button', 'Make Public').scrollIntoView().should('be.visible')
   })
 
   it('should make a holding public', () => {
-    cy.intercept('POST', 'https://bytenity.com/api/v2/me/portfolio/30/make-public', {
-      statusCode: 200,
-      body: { id: 30, is_public: true, public_quantity: 1 },
+    // Phase 8 (spec § 47.1): the FE no longer hits POST /me/portfolio/:id/make-public.
+    // It now hits POST /me/otc/stocks with a direction-keyed body:
+    //   { direction: 'sell', holding_id, quantity }
+    // Response shape is { offer: OtcStockOfferResponse }.
+    cy.intercept('POST', '**/api/v3/me/otc/stocks', {
+      statusCode: 201,
+      body: { offer: { id: 30, holding_id: 30, public_quantity: 3 } },
     }).as('makePublic')
 
     cy.loginAsClient('/portfolio')
     cy.wait('@getPortfolio')
 
     cy.contains('button', 'Make Public').first().click()
-    cy.wait('@makePublic')
+
+    // Dialog opens — set quantity and submit. Use {selectall} so the controlled
+    // number input replaces its current value rather than appending to it.
+    cy.get('[role="dialog"]').within(() => {
+      cy.contains(/make shares public.*aapl/i).should('be.visible')
+      cy.get('#public-quantity').type('{selectall}3').should('have.value', '3')
+      cy.contains('button', 'Make Public').click()
+    })
+
+    cy.wait('@makePublic').its('request.body').should('deep.equal', {
+      direction: 'sell',
+      holding_id: 30,
+      quantity: 3,
+    })
   })
 
   it('should navigate to holding transactions on row click', () => {
@@ -87,7 +104,7 @@ describe('Portfolio Page', () => {
   })
 
   it('should show empty state when no holdings', () => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio?*', {
+    cy.intercept('GET', '**/api/v3/me/portfolio?*', {
       body: { holdings: [], total_count: 0 },
     }).as('getEmptyPortfolio')
 
@@ -104,7 +121,7 @@ describe('Portfolio Page', () => {
     cy.wait('@getPortfolio')
 
     // AAPL stock row
-    cy.contains('td', 'AAPL').should('be.visible')
+    cy.contains('td', 'AAPL').scrollIntoView().should('be.visible')
     cy.contains('td', 'Apple Inc.').should('be.visible')
     cy.contains('td', 'stock').should('be.visible')
     cy.contains('td', '50').should('be.visible')
@@ -150,7 +167,7 @@ describe('Portfolio Page', () => {
   })
 
   it('Scenario 69 — Summary reflects zero unpaid tax when all tax is settled', () => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio/summary*', {
+    cy.intercept('GET', '**/api/v3/me/portfolio/summary*', {
       body: {
         total_profit: '100.00',
         total_profit_rsd: '11700.00',
@@ -181,22 +198,34 @@ describe('Portfolio Page', () => {
     cy.wait('@getPortfolio')
 
     // AAPL: public_quantity=0; ESM26: public_quantity=2
-    cy.contains('th', 'Public Qty').should('be.visible')
-    cy.get('tbody tr').eq(0).contains('td', '0').should('be.visible')
-    cy.get('tbody tr').eq(1).contains('td', '2').should('be.visible')
+    cy.contains('th', 'Public Qty').scrollIntoView().should('be.visible')
+    cy.get('tbody tr').eq(0).contains('td', '0').scrollIntoView().should('be.visible')
+    cy.get('tbody tr').eq(1).contains('td', '2').scrollIntoView().should('be.visible')
   })
 
   it('Scenario 70 — Make Public button is shown for stock and futures holdings but not for options', () => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio?*', {
+    cy.intercept('GET', '**/api/v3/me/portfolio?*', {
       body: {
         holdings: [
           {
-            id: 30, security_type: 'stock', ticker: 'AAPL', name: 'Apple Inc.',
-            quantity: 50, public_quantity: 0, account_id: 101, last_modified: '2026-04-20T10:00:00Z',
+            id: 30,
+            security_type: 'stock',
+            ticker: 'AAPL',
+            name: 'Apple Inc.',
+            quantity: 50,
+            public_quantity: 0,
+            account_id: 101,
+            last_modified: '2026-04-20T10:00:00Z',
           },
           {
-            id: 32, security_type: 'option', ticker: 'AAPL240621C00170000', name: 'AAPL Call 170',
-            quantity: 5, public_quantity: 0, account_id: 103, last_modified: '2026-04-22T08:00:00Z',
+            id: 32,
+            security_type: 'option',
+            ticker: 'AAPL240621C00170000',
+            name: 'AAPL Call 170',
+            quantity: 5,
+            public_quantity: 0,
+            account_id: 103,
+            last_modified: '2026-04-22T08:00:00Z',
           },
         ],
         total_count: 2,
@@ -207,20 +236,28 @@ describe('Portfolio Page', () => {
     cy.wait('@getMixedHoldings')
 
     // Stock row has Make Public; option row has Exercise instead
-    cy.get('tbody tr').eq(0).contains('button', 'Make Public').should('be.visible')
+    cy.get('tbody tr').eq(0).contains('button', 'Make Public').scrollIntoView().should('be.visible')
     cy.get('tbody tr').eq(1).contains('button', 'Make Public').should('not.exist')
-    cy.get('tbody tr').eq(1).contains('button', 'Exercise').should('be.visible')
+    cy.get('tbody tr').eq(1).contains('button', 'Exercise').scrollIntoView().should('be.visible')
   })
 
   // ── Scenario 71: Aktuar može da iskoristi opciju in-the-money ────────────
 
   it('Scenario 71 — Exercise button is shown for option holdings', () => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio?*', {
+    cy.intercept('GET', '**/api/v3/me/portfolio?*', {
       body: {
-        holdings: [{
-          id: 32, security_type: 'option', ticker: 'AAPL240621C00170000', name: 'AAPL Call 170',
-          quantity: 5, public_quantity: 0, account_id: 103, last_modified: '2026-04-22T08:00:00Z',
-        }],
+        holdings: [
+          {
+            id: 32,
+            security_type: 'option',
+            ticker: 'AAPL240621C00170000',
+            name: 'AAPL Call 170',
+            quantity: 5,
+            public_quantity: 0,
+            account_id: 103,
+            last_modified: '2026-04-22T08:00:00Z',
+          },
+        ],
         total_count: 1,
       },
     }).as('getOptionHolding')
@@ -228,20 +265,28 @@ describe('Portfolio Page', () => {
     cy.loginAsEmployee('/portfolio')
     cy.wait('@getOptionHolding')
 
-    cy.contains('button', 'Exercise').should('be.visible')
+    cy.contains('button', 'Exercise').scrollIntoView().should('be.visible')
   })
 
-  it('Scenario 71 — Clicking Exercise calls POST /api/v2/me/portfolio/:id/exercise', () => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio?*', {
+  it('Scenario 71 — Clicking Exercise calls POST /api/v3/me/portfolio/:id/exercise', () => {
+    cy.intercept('GET', '**/api/v3/me/portfolio?*', {
       body: {
-        holdings: [{
-          id: 32, security_type: 'option', ticker: 'AAPL240621C00170000', name: 'AAPL Call 170',
-          quantity: 5, public_quantity: 0, account_id: 103, last_modified: '2026-04-22T08:00:00Z',
-        }],
+        holdings: [
+          {
+            id: 32,
+            security_type: 'option',
+            ticker: 'AAPL240621C00170000',
+            name: 'AAPL Call 170',
+            quantity: 5,
+            public_quantity: 0,
+            account_id: 103,
+            last_modified: '2026-04-22T08:00:00Z',
+          },
+        ],
         total_count: 1,
       },
     }).as('getOptionHolding')
-    cy.intercept('POST', 'https://bytenity.com/api/v2/me/portfolio/32/exercise', {
+    cy.intercept('POST', '**/api/v3/me/portfolio/32/exercise', {
       statusCode: 200,
       body: { id: 32, security_type: 'option', quantity: 0 },
     }).as('exerciseOption')
@@ -255,16 +300,24 @@ describe('Portfolio Page', () => {
   })
 
   it('Scenario 71 — Backend rejects exercise for out-of-the-money option with 400', () => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio?*', {
+    cy.intercept('GET', '**/api/v3/me/portfolio?*', {
       body: {
-        holdings: [{
-          id: 32, security_type: 'option', ticker: 'AAPL240621C00170000', name: 'AAPL Call 170',
-          quantity: 5, public_quantity: 0, account_id: 103, last_modified: '2026-04-22T08:00:00Z',
-        }],
+        holdings: [
+          {
+            id: 32,
+            security_type: 'option',
+            ticker: 'AAPL240621C00170000',
+            name: 'AAPL Call 170',
+            quantity: 5,
+            public_quantity: 0,
+            account_id: 103,
+            last_modified: '2026-04-22T08:00:00Z',
+          },
+        ],
         total_count: 1,
       },
     }).as('getOptionHolding')
-    cy.intercept('POST', 'https://bytenity.com/api/v2/me/portfolio/32/exercise', {
+    cy.intercept('POST', '**/api/v3/me/portfolio/32/exercise', {
       statusCode: 400,
       body: { message: 'Option is not in-the-money' },
     }).as('rejectExercise')
@@ -289,20 +342,27 @@ describe('Portfolio Page', () => {
 
     // Default fixture has stock + futures holdings — no option type → no Exercise button
     cy.contains('button', 'Exercise').should('not.exist')
-    cy.contains('button', 'Sell').should('be.visible')
-    cy.contains('button', 'Make Public').should('be.visible')
+    cy.contains('button', 'Sell').scrollIntoView().should('be.visible')
+    cy.contains('button', 'Make Public').scrollIntoView().should('be.visible')
   })
 
   // ── Scenario 73: Hartija prelazi u portfolio nakon izvršenog BUY ordera ───
 
   it('Scenario 73 — Newly acquired holding appears in portfolio with public_quantity=0 (private by default)', () => {
-    cy.intercept('GET', 'https://bytenity.com/api/v2/me/portfolio?*', {
+    cy.intercept('GET', '**/api/v3/me/portfolio?*', {
       body: {
-        holdings: [{
-          id: 33, security_type: 'stock', ticker: 'MSFT', name: 'Microsoft Corp.',
-          quantity: 10, public_quantity: 0, account_id: 101,
-          last_modified: '2026-04-25T14:00:00Z',
-        }],
+        holdings: [
+          {
+            id: 33,
+            security_type: 'stock',
+            ticker: 'MSFT',
+            name: 'Microsoft Corp.',
+            quantity: 10,
+            public_quantity: 0,
+            account_id: 101,
+            last_modified: '2026-04-25T14:00:00Z',
+          },
+        ],
         total_count: 1,
       },
     }).as('getNewHolding')
@@ -310,11 +370,11 @@ describe('Portfolio Page', () => {
     cy.loginAsClient('/portfolio')
     cy.wait('@getNewHolding')
 
-    cy.contains('td', 'MSFT').should('be.visible')
+    cy.contains('td', 'MSFT').scrollIntoView().should('be.visible')
     cy.contains('td', 'Microsoft Corp.').should('be.visible')
     cy.contains('td', 'stock').should('be.visible')
     // public_quantity=0 → holding is private by default
     cy.get('tbody tr').eq(0).find('td').eq(4).should('have.text', '0')
-    cy.contains('button', 'Make Public').should('be.visible')
+    cy.contains('button', 'Make Public').scrollIntoView().should('be.visible')
   })
 })

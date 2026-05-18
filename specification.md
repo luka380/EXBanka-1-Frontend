@@ -1,6 +1,6 @@
 # EXBanka Frontend — Project Specification
 
-_Last updated: 2026-04-06 (admin management views, OTC portal, limits dashboard, Cypress e2e tests, employee card creation)_
+_Last updated: 2026-05-07 (added admin Peer Banks settings page — CRUD UI for the SI-TX peer bank registry; runtime backend host selector on login + Sidebar)_
 
 ---
 
@@ -104,7 +104,10 @@ src/
 │   │   ├── PasswordResetForm.tsx     # Token + new password form
 │   │   ├── PasswordResetForm.test.tsx
 │   │   ├── ActivationForm.tsx        # Token + initial password form
-│   │   └── ActivationForm.test.tsx
+│   │   ├── ActivationForm.test.tsx
+│   │   ├── BackendSelector.tsx       # Dropdown to choose backend host (5 presets + custom URL)
+│   │   ├── BackendSelector.test.tsx
+│   │   └── BackendSwitcherButton.tsx # Sidebar dialog launcher for in-app backend switch
 │   ├── employees/
 │   │   ├── EmployeeForm.tsx          # Thin wrapper: delegates to Create or Edit form
 │   │   ├── EmployeeForm.test.tsx
@@ -140,9 +143,34 @@ src/
 │   │   ├── CreateOrderForm.tsx + .test.tsx    # Order creation form
 │   │   ├── OrderTable.tsx + .test.tsx         # Reusable orders table with actions (cancel/approve/decline)
 │   │   └── OrdersTable.tsx + .test.tsx        # Simplified admin orders table (approve/decline only)
+│   ├── notifications/
+│   │   ├── NotificationItem.tsx + .test.tsx       # Single row with unread dot + relative time
+│   │   ├── NotificationDropdown.tsx + .test.tsx   # Popover content: list, empty/loading/error states, Mark all as read
+│   │   └── NotificationBell.tsx + .test.tsx       # Bell icon + unread badge ("9+" cap); base-ui Popover
+│   ├── shared/
+│   │   ├── AppErrorBoundary.tsx + .test.tsx       # Class boundary at router root; toasts + renders ErrorFallback
+│   │   ├── ErrorFallback.tsx + .test.tsx          # Stateless fallback page used by the boundary
+│   │   ├── PageTransition.tsx + .test.tsx         # Re-keys on pathname; 200ms fade + slide-in for every route change
+│   │   ├── TopProgressBar.tsx + .test.tsx         # Top-of-viewport accent bar driven by useIsFetching/useIsMutating (250ms grace)
+│   │   ├── LoadingSpinner.tsx                     # Existing
+│   │   ├── PaginationControls.tsx                 # Existing
+│   │   └── ProtectedRoute.tsx + .test.tsx         # Existing
 │   ├── otc/
-│   │   ├── OtcOffersTable.tsx + .test.tsx     # OTC offers list with Buy action
-│   │   └── BuyOtcDialog.tsx + .test.tsx       # Dialog to buy an OTC offer
+│   │   ├── OtcOffersTable.tsx + .test.tsx          # OTC offers list with Buy action
+│   │   ├── BuyOtcDialog.tsx + .test.tsx            # Dialog to buy an OTC offer (client variant)
+│   │   └── BuyOnBehalfOtcDialog.tsx + .test.tsx    # Dialog to buy on behalf of a client (employee variant)
+│   ├── funds/
+│   │   ├── FundsTable.tsx + .test.tsx              # Discovery table; rows linked to /funds/:id
+│   │   ├── FundDetailsPanel.tsx                    # Header card; resolves manager via useEmployee
+│   │   ├── FundHoldingsTable.tsx                   # Per-row useStock to resolve ticker
+│   │   ├── FundPerformanceChart.tsx                # Recharts line over performance[]
+│   │   ├── CreateFundForm.tsx + .test.tsx          # name + description + minimum_contribution_rsd
+│   │   ├── InvestInFundDialog.tsx + .test.tsx      # Source account + amount + currency; asBank toggle
+│   │   ├── RedeemFromFundDialog.tsx + .test.tsx    # Amount or "withdraw full"; asBank toggle
+│   │   └── MyFundsList.tsx + .test.tsx             # Per-position cards with Invest/Redeem
+│   ├── profit/
+│   │   ├── ActuaryPerformanceTable.tsx + .test.tsx # Sorted by realised_profit_rsd desc
+│   │   └── BankFundPositionsTable.tsx              # Linked to /funds/:id with Invest/Redeem actions
 │   ├── portfolio/
 │   │   ├── HoldingTable.tsx + .test.tsx       # Holdings table with Make Public/Exercise actions
 │   │   ├── HoldingsTable.tsx + .test.tsx      # Alternative holdings table variant
@@ -224,6 +252,7 @@ src/
 │   ├── AccountDetailsPage.tsx + .test.tsx
 │   ├── AdminAccountsPage.tsx + .test.tsx
 │   ├── AdminAccountCardsPage.tsx + .test.tsx     # Lists cards for an account; block/unblock/deactivate per card; "Create Card" button opens CreateCardDialog
+│   ├── BankAccountActivityPage.tsx + .test.tsx  # Paginated ledger (debit/credit) for a bank-owned account; employee-only (bank-accounts.manage)
 │   ├── AdminClientsPage.tsx + .test.tsx
 │   ├── AdminCardRequestsPage.tsx + .test.tsx
 │   ├── AdminLoanRequestsPage.tsx + .test.tsx
@@ -240,12 +269,18 @@ src/
 │   ├── AdminOrdersPage.tsx + .test.tsx
 │   ├── TaxPage.tsx + .test.tsx
 │   ├── TaxTrackingPage.tsx + .test.tsx   # (not yet routed)
-│   ├── OtcPortalPage.tsx + .test.tsx     # (not yet routed)
+│   ├── OtcPortalPage.tsx + .test.tsx     # /otc — role-aware: clients use BuyOtcDialog, employees use BuyOnBehalfOtcDialog
+│   ├── FundsDiscoveryPage.tsx            # /funds — search + active-only + InvestInFundDialog
+│   ├── FundDetailsPage.tsx               # /funds/:id — Panel + Holdings + Performance + Invest
+│   ├── CreateFundPage.tsx                # /funds/new — gated on funds.manage
+│   ├── ActuaryPerformancePage.tsx        # /admin/profit/actuaries — gated on actuaries.read.all
+│   ├── BankFundPositionsPage.tsx         # /admin/profit/funds — gated on funds.bank-position-read; reuses Invest/Redeem dialogs with asBank
 │   ├── AdminRolesPage.tsx + .test.tsx
 │   ├── AdminEmployeeLimitsPage.tsx + .test.tsx
 │   ├── AdminClientLimitsPage.tsx
 │   ├── AdminInterestRatesPage.tsx + .test.tsx
 │   ├── AdminFeesPage.tsx + .test.tsx
+│   ├── AdminPeerBanksPage.tsx + .test.tsx  # Settings: SI-TX peer bank registry CRUD
 │   ├── CardListPage.tsx + .test.tsx
 │   ├── CardRequestPage.tsx + .test.tsx
 │   ├── CreateAccountPage.tsx + .test.tsx
@@ -295,7 +330,8 @@ src/
 │
 ├── lib/
 │   ├── api/
-│   │   ├── axios.ts                  # Axios instance + interceptors (token refresh)
+│   │   ├── axios.ts                  # Axios instance + interceptors (token refresh, runtime baseURL)
+│   │   ├── backendHost.ts + .test.ts # Runtime-configurable backend host (5 presets + custom URL, persisted in localStorage)
 │   │   ├── auth.ts + .test.ts        # Auth API calls
 │   │   ├── employees.ts + .test.ts   # Employee CRUD API calls
 │   │   ├── accounts.ts               # Account API calls
@@ -385,6 +421,7 @@ src/
 | `/employees/:id` | EditEmployeePage | `employees.update` |
 | `/admin/accounts` | AdminAccountsPage | admin |
 | `/admin/accounts/:id/cards` | AdminAccountCardsPage | admin |
+| `/admin/bank-accounts/:id/activity` | BankAccountActivityPage | `bank-accounts.manage` |
 | `/admin/clients` | AdminClientsPage | admin |
 | `/admin/clients/new` | CreateClientPage | admin |
 | `/admin/clients/:id` | EditClientPage | admin |
@@ -401,6 +438,7 @@ src/
 | `/admin/limits/clients` | AdminClientLimitsPage | `limits.manage` |
 | `/admin/interest-rates` | AdminInterestRatesPage | `interest-rates.manage` |
 | `/admin/fees` | AdminFeesPage | `fees.manage` |
+| `/admin/peer-banks` | AdminPeerBanksPage | `requireAdmin` |
 
 ### Protected Routes — Shared Trading (AppLayout + ProtectedRoute)
 
@@ -442,7 +480,7 @@ src/
 ## 5. Pages
 
 ### LoginPage
-- Renders `LoginForm`. Background GIF is provided by `AuthLayout`.
+- Renders `BackendSelector` (dropdown to choose which backend the frontend talks to) above `LoginForm`. Background GIF is provided by `AuthLayout`.
 - Handles unified login for both employees and clients via a single `/login` route.
 - After successful login, reads `userType` from Redux state (derived from JWT `system_type` field): redirects employees to `/admin/accounts`, clients to `/home`.
 
@@ -502,7 +540,7 @@ src/
 ### StockExchangesPage
 - Displays list of stock exchanges with search filter and pagination.
 - Accessible to all employees (`requiredRole="Employee"`).
-- Testing mode toggle button visible only to users with `exchanges.manage` permission (checked via `selectHasPermission`).
+- Testing mode toggle button visible to admins (`EmployeeAdmin`) and to users with `exchanges.manage` permission (checked via `selectHasPermission`, which bypasses for admins).
 - Fetches exchanges via `useStockExchanges(apiFilters)` and testing mode via `useTestingMode()`.
 - Toggle calls `useSetTestingMode` mutation.
 
@@ -588,7 +626,16 @@ src/
 - Create: opens `CreateFeeDialog`; Edit: opens `EditFeeDialog`; Deactivate: confirmation dialog → `useDeleteFee` mutation.
 - Mutations: `useCreateFee`, `useUpdateFee`, `useDeleteFee`.
 
-### OtcPortalPage _(created, not yet routed)_
+### AdminPeerBanksPage
+- Settings page for the SI-TX cross-bank peer registry. Admin-only (`requireAdmin`); see REST_API_v3 §38.
+- Fetches the registry via `usePeerBanks()` (`GET /api/v3/peer-banks`); renders `PeerBanksTable` with Edit, Disable/Enable, and Remove actions per row.
+- **Add Peer Bank** dialog (`CreatePeerBankDialog`): collects `bank_code`, `routing_number`, `base_url`, `api_token` (required) plus optional `hmac_inbound_key` / `hmac_outbound_key` and an `active` flag. Validates the URL is `http(s)://...` before submit.
+- **Edit Peer Bank** dialog (`EditPeerBankDialog`): updates `base_url` / `active`; lets the admin rotate `api_token` and HMAC keys (blank fields keep the current secret). Identifying fields (`bank_code`, `routing_number`) are read-only after creation.
+- **Toggle Active** is a one-click `PUT /api/v3/peer-banks/:id` with `{active: !current}` — disabling a peer immediately stops both inbound and outbound traffic without losing the configuration.
+- **Remove** confirms via dialog before `DELETE /api/v3/peer-banks/:id`.
+- API: `lib/api/peerBanks.ts`. Hooks: `usePeerBanks`, `useCreatePeerBank`, `useUpdatePeerBank`, `useDeletePeerBank` (`hooks/usePeerBanks.ts`). Types: `types/peerBank.ts`.
+
+### OtcPortalPage
 - OTC trading portal for clients.
 - Fetches OTC offers via `useOtcOffers()`; fetches client accounts via `useClientAccounts()`.
 - Renders `OtcOffersTable`. Selecting an offer opens `BuyOtcDialog` to specify quantity and account.
@@ -642,6 +689,15 @@ src/
 - Validation: `activationSchema`
 - On submit: calls `activateAccount({token, password, confirm_password})`
 - On success: confirmation message
+
+**BackendSelector** (`components/auth/BackendSelector.tsx`)
+- Dropdown to choose the API host the frontend talks to. Five presets: `localhost` (`http://localhost:8080`), `instance1` / `instance2` / `instance3` (`https://project-exbanka.bytenity.com/instanceN`), and `custom` (user-entered URL).
+- Persists selection in `localStorage` under `exbanka.backendPreset` / `exbanka.backendCustomUrl`. Selecting a preset persists immediately; the custom URL requires hitting **Apply** and is validated as `http(s)://...`.
+- Optional `onHostChange(host)` callback fires after a successful save.
+- Backed by `lib/api/backendHost.ts` (presets, getters, `setSelection`, `subscribeToHostChange`); `lib/api/axios.ts` reads the host on every request, so a switch takes effect without a rebuild.
+
+**BackendSwitcherButton** (`components/auth/BackendSwitcherButton.tsx`)
+- Sidebar entry that opens a dialog containing `BackendSelector` for in-app switching. The Sidebar wires `onHostChange` to clear tokens (`sessionStorage`), `queryClient.clear()`, dispatch `clearAuth()`, and navigate to `/login` — since a new backend issues different tokens, the existing session is no longer valid.
 
 ---
 
@@ -856,11 +912,12 @@ src/
 - Logo: "EXBanka"
 - Nav links (employee portal): Employees, Card Requests (`/admin/cards/requests`), Loan Requests, etc.
 - Tax link shown only for users with `tax.manage` permission.
-- **Settings section** (shown when user has any of `employees.permissions`, `limits.manage`, `interest-rates.manage`, `fees.manage`):
+- **Settings section** (shown to `EmployeeAdmin`):
   - Roles & Permissions → `/admin/roles` (requires `employees.permissions`)
   - Employee Limits → `/admin/limits/employees` (requires `limits.manage`)
   - Interest Rates → `/admin/interest-rates` (requires `interest-rates.manage`)
   - Fees → `/admin/fees` (requires `fees.manage`)
+  - Peer Banks → `/admin/peer-banks` (admin-only — manage SI-TX cross-bank peer registry)
 - Displays current user's email
 - Logout button → dispatches `logoutThunk` → redirects to `/login`
 
@@ -929,7 +986,23 @@ interface AuthState {
 | `selectIsAuthenticated` | `status === 'authenticated'` |
 | `selectIsAdmin` | `user.role === 'EmployeeAdmin'` |
 | `selectCurrentUser` | `AuthUser \| null` |
-| `selectHasPermission(state, perm)` | `boolean` — checks `user.permissions[]` |
+| `selectHasPermission(state, perm)` | `boolean` — returns `true` for `EmployeeAdmin` (bypass); otherwise prefix-matches against `user.permissions[]` |
+
+### Error Handling (`lib/errors/`, `lib/queryClient.ts`, `components/shared/AppErrorBoundary.tsx`)
+
+Errors are surfaced to the user through one canonical pipeline. **No silent failures.** See [Error Handling — Developer Guide](/docs/error-handling.md) and the policy in `CLAUDE.md`.
+
+| Layer | File | Responsibility |
+|---|---|---|
+| Parser | `lib/errors/parseApiError.ts` | Pure `unknown -> AppError`. Maps `AxiosError` (4xx/5xx, network, timeout), `Error`, `string`, unknown. |
+| Notifier | `lib/errors/notify.ts` | `notifyError(err)` parses + `toast.error`. `notifySuccess(msg)` for happy paths. |
+| Global query fallback | `lib/queryClient.ts` | `createQueryClient()` configures `queryCache.onError` and `mutationCache.onError`. Queries/mutations without their own `onError` automatically toast. |
+| Render boundary | `components/shared/AppErrorBoundary.tsx` | Class boundary at the router root; catches render exceptions, toasts, shows `ErrorFallback`. |
+| Toaster mount | `main.tsx` | One `<Toaster richColors position="top-right" />` at the providers root. |
+
+**Per-call opt-outs:**
+- Query: `meta: { suppressGlobalError: true }` to suppress the global toast for an "expected to fail" query (e.g., polling).
+- Mutation: defining ANY `onError` callback suppresses the global toast — you own the error UX. Recommended pattern is to still call `notifyError(err)` inside that callback.
 
 ---
 
@@ -937,9 +1010,16 @@ interface AuthState {
 
 ### Axios Client (`lib/api/axios.ts`)
 
-- Base URL: `http://localhost:8080`
-- **Request interceptor:** attaches `Authorization: Bearer <access_token>` from `sessionStorage`
-- **Response interceptor:** on 401, attempts token refresh via `/api/auth/refresh`, retries original request. If refresh fails, clears session and redirects to `/login`.
+- Base URL: resolved at request time as `${getCurrentHost()}/api/${API_VERSION}` — see `lib/api/backendHost.ts`. The host is user-selectable from the login screen (and the sidebar) and persisted in `localStorage`; falls back to the build-time `VITE_API_HOST` (default `http://localhost:8080`).
+- **Request interceptor:** sets `config.baseURL` from `getApiBaseUrl()` and attaches `Authorization: Bearer <access_token>` from `sessionStorage`
+- **Response interceptor:** on 401, attempts token refresh via `/auth/refresh` against the current resolved host, retries original request. If refresh fails, clears session and redirects to `/login`.
+
+### Backend Host (`lib/api/backendHost.ts`)
+
+- `BACKEND_PRESETS`: localhost · instance1 · instance2 · instance3 · custom (`https://project-exbanka.bytenity.com/instance{1,2,3}` for the bytenity entries).
+- `getCurrentHost()` / `getCurrentSelection()` read from `localStorage` (keys `exbanka.backendPreset`, `exbanka.backendCustomUrl`); fall back to the env default when nothing is stored.
+- `setSelection({ presetId, customUrl? })` persists and validates (custom URL must be `http(s)://...`), then notifies subscribers.
+- `subscribeToHostChange(listener)` for components / clients that need to react to a switch.
 
 ### Auth API (`lib/api/auth.ts`)
 
@@ -967,7 +1047,7 @@ interface AuthState {
 | `getCardRequests(filters?)` | GET | `/api/cards/requests` — supports `status`, `page`, `page_size` query params |
 | `approveCardRequest(id)` | PUT | `/api/cards/requests/{id}/approve` |
 | `rejectCardRequest(id, reason)` | PUT | `/api/cards/requests/{id}/reject` — body `{ reason: string }` |
-| `createAuthorizedPerson(payload)` | POST | `/api/cards/authorized-person` — body `CreateAuthorizedPersonPayload`; returns `AuthorizedPerson & { id }` |
+| `createAuthorizedPerson(payload)` | POST | `/api/cards/authorized-persons` — body `CreateAuthorizedPersonPayload`; returns `AuthorizedPerson & { id }` |
 | `createCard(payload)` | POST | `/api/cards` — body `CreateCardPayload`; returns `Card` |
 
 ### Roles API (`lib/api/roles.ts`)
@@ -1006,7 +1086,7 @@ interface AuthState {
 | `getActuaries(filters?)` | GET | `/api/actuaries` — supports `search`, `position`, `page`, `page_size` query params |
 | `setActuaryLimit(id, payload)` | PUT | `/api/actuaries/{id}/limit` — body `{ limit: string }` |
 | `resetActuaryLimit(id)` | POST | `/api/actuaries/{id}/reset-limit` |
-| `setActuaryApproval(id, payload)` | PUT | `/api/actuaries/{id}/approval` — body `{ need_approval: boolean }` |
+| `setActuaryApproval(id, payload)` | POST | `/api/actuaries/{id}/require-approval` if `payload.need_approval` is `true`, else `/api/actuaries/{id}/skip-approval` (no body) |
 
 ### Stock Exchanges API (`lib/api/stockExchanges.ts`)
 
@@ -1015,6 +1095,54 @@ interface AuthState {
 | `getStockExchanges(filters?)` | GET | `/api/stock-exchanges` — supports `search`, `page`, `page_size` query params |
 | `getTestingMode()` | GET | `/api/stock-exchanges/testing-mode` |
 | `setTestingMode(enabled)` | POST | `/api/stock-exchanges/testing-mode` — body `{ enabled: boolean }` |
+
+### Notifications API (`lib/api/notifications.ts`)
+
+| Function | Method | Endpoint |
+|---|---|---|
+| `getNotifications(filters?)` | GET | `/me/notifications` — supports `page`, `page_size`, `read` ("read" \| "unread") |
+| `getUnreadCount()` | GET | `/me/notifications/unread-count` |
+| `markNotificationRead(id)` | POST | `/me/notifications/{id}/read` |
+| `markAllNotificationsRead()` | POST | `/me/notifications/read-all` |
+
+### OTC API (extension — `lib/api/otc.ts`)
+
+| Function | Method | Endpoint |
+|---|---|---|
+| `buyOtcOfferOnBehalf(id, payload)` | POST | `/otc/offers/{id}/buy-on-behalf` — body `{ client_id, account_id, quantity }` (employee variant) |
+
+### Investment Funds API (`lib/api/funds.ts`)
+
+| Function | Method | Endpoint |
+|---|---|---|
+| `getFunds(filters?)` | GET | `/investment-funds` — `page`, `page_size`, `search`, `active_only` |
+| `getFund(id)` | GET | `/investment-funds/{id}` — returns `{ fund, holdings, performance }` |
+| `createFund(payload)` | POST | `/investment-funds` — body `CreateFundPayload`; requires `funds.manage` |
+| `updateFund(id, payload)` | PUT | `/investment-funds/{id}` — body `UpdateFundPayload`; requires `funds.manage` |
+| `investInFund(id, payload)` | POST | `/investment-funds/{id}/invest` — body `{ source_account_id, amount, currency, on_behalf_of_type? }` |
+| `redeemFromFund(id, payload)` | POST | `/investment-funds/{id}/redeem` — body `{ amount_rsd, target_account_id, on_behalf_of_type? }` |
+| `getMyFundPositions()` | GET | `/me/investment-funds` — caller's positions (employees act as bank) |
+
+### Profit Banke API (`lib/api/profit.ts`)
+
+| Function | Method | Endpoint |
+|---|---|---|
+| `getActuaryPerformance()` | GET | `/actuaries/performance` — requires `actuaries.read.all` |
+| `getBankFundPositions()` | GET | `/investment-funds/positions` — requires `funds.bank-position-read` |
+
+### OTC Option Contracts API (`lib/api/otcOption.ts`) — §29
+
+| Function | Method | Endpoint |
+|---|---|---|
+| `createOtcOptionOffer(payload)` | POST | `/otc/offers` — open negotiation thread |
+| `counterOtcOptionOffer(id, payload)` | POST | `/otc/offers/{id}/counter` |
+| `acceptOtcOptionOffer(id, payload)` | POST | `/otc/offers/{id}/accept` — premium SAGA + creates contract |
+| `rejectOtcOptionOffer(id)` | POST | `/otc/offers/{id}/reject` |
+| `getOtcOptionOffer(id)` | GET | `/otc/offers/{id}` — returns `{ offer, revisions }` |
+| `getMyOtcOptionOffers(filters?)` | GET | `/me/otc/offers` — `role`, `page`, `page_size` |
+| `getOtcOptionContract(id)` | GET | `/otc/contracts/{id}` |
+| `getMyOtcOptionContracts(filters?)` | GET | `/me/otc/contracts` |
+| `exerciseOtcOptionContract(id, payload)` | POST | `/otc/contracts/{id}/exercise` — 5-phase SAGA |
 
 ### Securities API (`lib/api/securities.ts`)
 
@@ -1042,7 +1170,7 @@ interface AuthState {
 | `cancelOrder(id)` | POST | `/api/me/orders/{id}/cancel` |
 | `getAllOrders(filters?)` | GET | `/api/orders` |
 | `approveOrder(id)` | POST | `/api/orders/{id}/approve` |
-| `declineOrder(id)` | POST | `/api/orders/{id}/decline` |
+| `declineOrder(id)` | POST | `/api/orders/{id}/reject` |
 
 ### Portfolio API (`lib/api/portfolio.ts`)
 
@@ -1114,10 +1242,24 @@ interface AuthState {
 | `useActuaries(filters?)` | React Query | Fetch actuaries with server-side filters; query key: `['actuaries', filters]` |
 | `useSetActuaryLimit()` | React Query | Mutation: PUT limit; invalidates `['actuaries']` on success |
 | `useResetActuaryLimit()` | React Query | Mutation: POST reset limit; invalidates `['actuaries']` on success |
-| `useSetActuaryApproval()` | React Query | Mutation: PUT approval; invalidates `['actuaries']` on success |
+| `useSetActuaryApproval()` | React Query | Mutation: POST require-approval/skip-approval action; invalidates `['actuaries']` on success |
 | `useStockExchanges(filters?)` | React Query | Fetch stock exchanges; query key: `['stock-exchanges', filters]` |
 | `useTestingMode()` | React Query | Fetch testing mode status; query key: `['stock-exchanges', 'testing-mode']` |
 | `useSetTestingMode()` | React Query | Mutation: POST testing mode; invalidates `['stock-exchanges', 'testing-mode']` on success |
+| `useNotifications(filters?)` | React Query | Fetch notifications list; query key: `['notifications', filters]` |
+| `useUnreadNotificationCount()` | React Query | Fetch unread count; query key: `['notifications', 'unread-count']`; polls every 60s while tab is visible |
+| `useMarkNotificationRead()` | React Query | Mutation: POST mark single notification read; invalidates `['notifications']` |
+| `useMarkAllNotificationsRead()` | React Query | Mutation: POST mark all read; invalidates `['notifications']` |
+| `useBuyOtcOfferOnBehalf()` | React Query | Mutation: employee POST `/otc/offers/:id/buy-on-behalf`; invalidates `['otc-offers']` |
+| `useFunds(filters?)` | React Query | List funds; `['funds', filters]` |
+| `useFund(id)` | React Query | Fund detail; `['funds', id]`, disabled when id is null |
+| `useMyFundPositions()` | React Query | `['funds', 'me']` |
+| `useCreateFund()` | React Query | Mutation: invalidates `['funds']` |
+| `useUpdateFund(id)` | React Query | Mutation: invalidates `['funds']` + `['funds', id]` |
+| `useInvestFund(id)` | React Query | Mutation: invalidates `['funds', id]` + `['funds', 'me']` + `['accounts']` |
+| `useRedeemFund(id)` | React Query | Mutation: same invalidations as invest |
+| `useActuaryPerformance()` | React Query | `['profit', 'actuaries']` |
+| `useBankFundPositions()` | React Query | `['profit', 'bank-fund-positions']` |
 | `useStocks(filters?)` | React Query | Fetch stocks; query key: `['stocks', filters]` |
 | `useStock(id)` | React Query | Fetch single stock; query key: `['stock', id]` |
 | `useStockHistory(id, filters?)` | React Query | Fetch stock price history; query key: `['stock-history', id, filters]` |
@@ -1167,6 +1309,7 @@ interface AuthState {
 | `useClientLimits(id)` | React Query | Fetch client limits; query key: `['clientLimits', id]` |
 | `useUpdateClientLimits()` | React Query | Mutation: update client limits; invalidates `['clientLimits', id]` |
 | `useSearchAccounts(query)` | React Query | Search accounts by account_number_filter; query key: `['accounts', 'search', query]`; disabled when query is empty |
+| `useBankAccountActivity(id, filters?)` | React Query | Fetch ledger entries for a bank-owned account; query key: `['bankAccountActivity', id, filters]`; calls `GET /api/v3/bank-accounts/:id/activity` |
 | `useCreateCard()` | React Query | Mutation: POST authorized person then POST card sequentially; invalidates `['cards', 'account', account_number]` on success |
 
 ---

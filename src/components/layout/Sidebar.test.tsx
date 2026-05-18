@@ -5,37 +5,56 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { createMockAuthState, createMockAuthUser } from '@/__tests__/fixtures/auth-fixtures'
 
 describe('Sidebar', () => {
-  it('shows Employees link when user has employees.read permission', () => {
+  it('shows Employees link when role is EmployeeAdmin', () => {
     renderWithProviders(<Sidebar />, {
       preloadedState: {
         auth: createMockAuthState({
-          user: createMockAuthUser({ permissions: ['employees.read'] }),
+          user: createMockAuthUser({ role: 'EmployeeAdmin' }),
         }),
       },
     })
     expect(screen.getByRole('link', { name: /employees/i })).toHaveAttribute('href', '/employees')
   })
 
-  it('shows Employees link regardless of role when employees.read permission is present', () => {
+  it('hides Employees link for non-admin employee roles', () => {
     renderWithProviders(<Sidebar />, {
       preloadedState: {
         auth: createMockAuthState({
-          user: createMockAuthUser({ role: 'EmployeeBasic', permissions: ['employees.read'] }),
-        }),
-      },
-    })
-    expect(screen.getByRole('link', { name: /employees/i })).toHaveAttribute('href', '/employees')
-  })
-
-  it('hides Employees link when user lacks employees.read permission', () => {
-    renderWithProviders(<Sidebar />, {
-      preloadedState: {
-        auth: createMockAuthState({
-          user: createMockAuthUser({ role: 'EmployeeBasic', permissions: [] }),
+          user: createMockAuthUser({ role: 'EmployeeBasic' }),
         }),
       },
     })
     expect(screen.queryByRole('link', { name: /employees/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Actuaries and Order Approval for EmployeeSupervisor', () => {
+    renderWithProviders(<Sidebar />, {
+      preloadedState: {
+        auth: createMockAuthState({
+          user: createMockAuthUser({ role: 'EmployeeSupervisor' }),
+        }),
+      },
+    })
+    expect(screen.getByRole('link', { name: /actuaries/i })).toHaveAttribute(
+      'href',
+      '/admin/actuaries'
+    )
+    expect(screen.getByRole('link', { name: /order approval/i })).toHaveAttribute(
+      'href',
+      '/admin/orders'
+    )
+  })
+
+  it('hides Actuaries and Order Approval for EmployeeAgent', () => {
+    renderWithProviders(<Sidebar />, {
+      preloadedState: {
+        auth: createMockAuthState({
+          user: createMockAuthUser({ role: 'EmployeeAgent' }),
+        }),
+      },
+    })
+    expect(screen.queryByRole('link', { name: /actuaries/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /order approval/i })).not.toBeInTheDocument()
   })
 
   it('shows logout button', () => {
@@ -78,5 +97,58 @@ describe('Sidebar', () => {
     await waitFor(() => {
       expect(document.documentElement.classList.contains('dark')).toBe(true)
     })
+  })
+
+  it('shows the consolidated Settings link for EmployeeAdmin', () => {
+    renderWithProviders(<Sidebar />, {
+      preloadedState: {
+        auth: createMockAuthState({
+          user: createMockAuthUser({ role: 'EmployeeAdmin' }),
+        }),
+      },
+    })
+    expect(screen.getByRole('link', { name: /^settings$/i })).toHaveAttribute(
+      'href',
+      '/admin/settings'
+    )
+  })
+
+  it('hides the Settings link for non-admin employees', () => {
+    renderWithProviders(<Sidebar />, {
+      preloadedState: {
+        auth: createMockAuthState({
+          user: createMockAuthUser({ role: 'EmployeeBasic' }),
+        }),
+      },
+    })
+    expect(screen.queryByRole('link', { name: /^settings$/i })).not.toBeInTheDocument()
+  })
+
+  it('exposes a Backend button that opens the backend selector', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<Sidebar />, {
+      preloadedState: { auth: createMockAuthState() },
+    })
+    await user.click(screen.getByRole('button', { name: /^backend$/i }))
+    expect(await screen.findByText(/switch backend/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^backend$/i)).toBeInTheDocument()
+  })
+
+  it('clears auth and tokens when the backend host is changed mid-session', async () => {
+    const user = userEvent.setup()
+    sessionStorage.setItem('access_token', 'at')
+    sessionStorage.setItem('refresh_token', 'rt')
+    const { store } = renderWithProviders(<Sidebar />, {
+      preloadedState: { auth: createMockAuthState() },
+    })
+    await user.click(screen.getByRole('button', { name: /^backend$/i }))
+    await user.click(await screen.findByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name: /instance 2/i }))
+
+    await waitFor(() => {
+      expect(store.getState().auth.user).toBeNull()
+    })
+    expect(sessionStorage.getItem('access_token')).toBeNull()
+    expect(sessionStorage.getItem('refresh_token')).toBeNull()
   })
 })

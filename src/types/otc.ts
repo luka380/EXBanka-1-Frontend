@@ -20,6 +20,10 @@ export interface OtcLocalOffer {
 
 export interface OtcRemoteOffer {
   kind: 'remote'
+  /** Local surrogate id from the options discovery feed — only present for entries sourced from
+   *  GET /otc/options?kind=remote. Absent for raw remote stocks from GET /otc/stocks.
+   *  Required by POST /otc/options/:id/bid; omission means the offer is view-only. */
+  id?: number
   bank_code: string
   owner_id: string
   security_type: 'stock' | 'futures'
@@ -59,24 +63,4 @@ export interface OtcFilters {
   ticker?: string
   kind?: 'local' | 'remote'
   bank_code?: string
-}
-
-export interface MoneyAmount {
-  amount: string
-  currency: string
-}
-
-export interface PeerOtcNegotiationRequest {
-  seller_bank_code: string
-  seller_id: string
-  stock: { ticker: string }
-  amount: number
-  settlement_date: string
-  price_per_unit: MoneyAmount
-  premium: MoneyAmount
-}
-
-export interface PeerOtcNegotiationResponse {
-  routingNumber: number
-  id: string
 }

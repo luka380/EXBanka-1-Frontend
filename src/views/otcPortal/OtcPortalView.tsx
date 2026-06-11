@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   useOtcOffers,
+  useRemoteOptionOffers,
   useBuyOtcOffer,
   useBuyOtcOfferOnBehalf,
-  useCreatePeerOtcNegotiation,
+  usePlaceBidOnRemoteOffer,
 } from '@/hooks/useOtc'
 import { useClientAccounts, useAccountsByClient } from '@/hooks/useAccounts'
 import { useAllClients } from '@/hooks/useClients'
@@ -12,12 +13,31 @@ import { useAppSelector } from '@/hooks/useAppSelector'
 import { selectUserType, selectCurrentUser } from '@/store/selectors/authSelectors'
 import { notifySuccess } from '@/lib/errors'
 import type { OtcOffer, OtcLocalOffer, OtcRemoteOffer } from '@/types/otc'
+import type { OtcOptionRow, PlaceBidPayload } from '@/views/otcOptions/types'
 import { BuyOnBehalfOtcDialog } from '@/views/otcPortal/components/BuyOnBehalfOtcDialog'
 import { BuyOtcDialog } from '@/views/otcPortal/components/BuyOtcDialog'
 import { BuyRemoteOtcDialog } from '@/views/otcPortal/components/BuyRemoteOtcDialog'
 import { OtcOffersTable } from '@/views/otcPortal/components/OtcOffersTable'
+import { dedupeOffers } from '@/views/otcPortal/lib/offerKey'
 import { OtcPeersStatusBanner } from '@/views/otcPortal/components/OtcPeersStatusBanner'
 import { LoadingState, ViewShell } from '@/views/shared'
+
+function remoteOptionToOffer(row: OtcOptionRow): OtcRemoteOffer {
+  return {
+    kind: 'remote',
+    id: Number(row.offer_id),
+    bank_code: row.bank_code,
+    owner_id:
+      typeof row.seller_id === 'string'
+        ? row.seller_id
+        : String((row.seller_id as { id: string | number }).id ?? ''),
+    security_type: 'stock',
+    ticker: row.ticker,
+    quantity: Number(row.amount),
+    price_per_unit: row.strike_price,
+    currency: row.strike_currency,
+  }
+}
 
 export function OtcPortalView() {
   const userType = useAppSelector(selectUserType)
@@ -25,7 +45,16 @@ export function OtcPortalView() {
   const isEmployee = userType === 'employee'
 
   const { data, isLoading } = useOtcOffers()
-  const offers = data?.offers ?? []
+  const { data: remoteOptionData } = useRemoteOptionOffers()
+
+  // All /otc/stocks entries (local + remote stocks, the latter without id) plus remote option rows
+  // from /otc/options?kind=remote which carry a local surrogate offer_id for POST /otc/options/:id/bid.
+  // Deduped because the backend can surface the same listing more than once (e.g. repeated in a
+  // single response), which otherwise renders as doubled rows.
+  const offers: OtcOffer[] = dedupeOffers([
+    ...(data?.offers ?? []),
+    ...(remoteOptionData?.offers ?? []).filter((o) => o.kind === 'remote').map(remoteOptionToOffer),
+  ])
 
   const [selectedOffer, setSelectedOffer] = useState<OtcOffer | null>(null)
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
@@ -40,7 +69,7 @@ export function OtcPortalView() {
 
   const buyMutation = useBuyOtcOffer()
   const buyOnBehalfMutation = useBuyOtcOfferOnBehalf()
-  const peerNegotiationMutation = useCreatePeerOtcNegotiation()
+  const placeBidMutation = usePlaceBidOnRemoteOffer()
 
   const closeDialog = () => {
     setSelectedOffer(null)
@@ -52,6 +81,8 @@ export function OtcPortalView() {
 
     if (selectedOffer.kind === 'remote') {
       const remoteOffer: OtcRemoteOffer = selectedOffer
+      const optionOfferId = remoteOffer.id
+      if (!optionOfferId) return null // remote stock without option id — view-only, not biddable
       return (
         <BuyRemoteOtcDialog
           open
@@ -59,15 +90,19 @@ export function OtcPortalView() {
             if (!open) closeDialog()
           }}
           offer={remoteOffer}
-          onSubmit={(payload) =>
-            peerNegotiationMutation.mutate(payload, {
-              onSuccess: () => {
-                notifySuccess('Negotiation submitted to peer bank.')
-                closeDialog()
-              },
-            })
+          accounts={clientAccounts}
+          onSubmit={(payload: PlaceBidPayload) =>
+            placeBidMutation.mutate(
+              { offerId: optionOfferId, ...payload },
+              {
+                onSuccess: () => {
+                  notifySuccess('Bid submitted to peer bank.')
+                  closeDialog()
+                },
+              }
+            )
           }
-          loading={peerNegotiationMutation.isPending}
+          loading={placeBidMutation.isPending}
         />
       )
     }

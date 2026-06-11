@@ -20,6 +20,9 @@ import {
   useOtcNegotiationRevisions,
 } from '@/views/otcOptions/hooks/useOtcOptionsLists'
 import { NegotiationRevisionsTable } from '@/views/otcOptions/components/NegotiationRevisionsTable'
+import { isNegotiationActive } from '@/views/otcOptions/lib/negotiationStatus'
+import { hasOwnNegotiationChain } from '@/views/otcOptions/lib/myNegotiation'
+import { resolveListingId } from '@/views/otcOptions/lib/listingId'
 
 interface Props {
   offer: OtcOptionRow
@@ -34,7 +37,7 @@ function partiesMatch(a: OtcParty, b: OtcParty): boolean {
 }
 
 export function BidderActivityPanel({ offer, accounts, currentBidder, onBack, onPlaceBid }: Props) {
-  const offerId = Number(offer.offer_id)
+  const offerId = resolveListingId(offer)
   // Source the bidder's own chain from the caller-scoped endpoint so the
   // bidder page never reads competitors' chains via /otc/options/:id/...
   // The /me/... response is already filtered to chains the caller is a party
@@ -43,10 +46,18 @@ export function BidderActivityPanel({ offer, accounts, currentBidder, onBack, on
   const counter = useCounterNegotiation(offerId)
   const withdraw = useWithdrawNegotiation(offerId)
 
-  const myChain: OtcNegotiation | undefined = useMemo(
-    () => data?.negotiations?.find((n) => Number(n.parent_offer_id ?? n.offer_id ?? 0) === offerId),
-    [data, offerId]
-  )
+  const myChain: OtcNegotiation | undefined = useMemo(() => {
+    if (!data?.negotiations) return undefined
+    // Primary: use the offer's my_negotiation_id — the direct bidder-chain id
+    // returned by the discovery feed (spec §47.2). For remote offers the
+    // parent_offer_id on the mirror row is the seller-bank's id (not our local
+    // surrogate), so we can't rely on that fallback alone.
+    if (hasOwnNegotiationChain(offer.my_negotiation_id)) {
+      const negotiationId = Number(offer.my_negotiation_id)
+      return data.negotiations.find((n) => n.id === negotiationId)
+    }
+    return data.negotiations.find((n) => Number(n.parent_offer_id ?? n.offer_id ?? 0) === offerId)
+  }, [data, offer.my_negotiation_id, offerId])
 
   // Whose move is it? If the chain's last_action_by matches the bidder, the
   // owner is expected to respond; otherwise it's the bidder's turn.
@@ -66,7 +77,7 @@ export function BidderActivityPanel({ offer, accounts, currentBidder, onBack, on
           </Button>
           <div className="min-w-0">
             <h2 className="text-xl font-semibold truncate">
-              {offer.ticker} · #{String(offer.offer_id)}
+              {offer.ticker} · #{String(offerId)}
             </h2>
             <p className="text-xs text-muted-foreground">
               {offer.direction === 'sell_initiated' ? 'Sell listing' : 'Buy listing'} ·{' '}
@@ -154,7 +165,7 @@ function YourChainBody({
   onWithdraw: () => void
 }) {
   const [showCounterForm, setShowCounterForm] = useState(false)
-  const isTerminal = !(chain.status === 'open' || chain.status === 'countered')
+  const isTerminal = !isNegotiationActive(chain.status)
 
   // The "Your chain" panel now leads with the full revision history so the
   // bidder sees every back-and-forth with the owner — the snapshot of the
